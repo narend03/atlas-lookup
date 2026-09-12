@@ -1,0 +1,8 @@
+account_number,debtor_name,phone_number,balance,status,client_name
+ATL-1001,John Doe,(415) 555-0134,2600.00,Active,Alpha Bank
+,Ghost Account,5555550100,100,Active,Alpha Bank
+ATL-2001,Bad Balance,5555550101,twelve dollars,Active,Alpha Bank
+ATL-2002,Dup Row First,5555550102,100,Active,Alpha Bank
+ATL-2002,Dup Row Last,5555550102,200,Active,Alpha Bank
+ATL-2003,No Status,5555550103,50,,Alpha Bank
+ATL-2004,Negative,5555550104,-40,Active,Alpha Bank

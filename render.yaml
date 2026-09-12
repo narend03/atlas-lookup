@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: atlas-lookup
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    # The free tier has an ephemeral disk, so re-ingest the bundled CSV on every boot.
+    startCommand: npm run ingest && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: DB_PATH
+        value: /tmp/atlas.db

@@ -1,0 +1,9 @@
+account_number,debtor_name,phone_number,balance,status,client_name
+ATL-1001,John Doe,(415) 555-0134,2450.00,Active,Alpha Bank
+ATL-1002,Maria Gonzalez,415-555-0199,780.25,Active,Alpha Bank
+ATL-1003,Wei Chen,+1 650 555 0110,12000,Active,Beacon Credit Union
+ATL-1004,Aisha Patel,2125550142,0,Closed,Alpha Bank
+ATL-1005,Samuel Okafor,3105550177,"$3,299.99",Active,Northwind Lending
+ATL-1006,Emily Carter,7735550120,150.5,Paid,Beacon Credit Union
+ATL-1007,Luis Fernandez,3055550188,5600,Active,Northwind Lending
+ATL-1008,Priya Raman,4085550166,925.75,Disputed,Alpha Bank
