@@ -14,4 +14,4 @@ function openDb() {
   return db;
 }
 
-module.exports = { openDb, DB_PATH };
+module.exports = { openDb };

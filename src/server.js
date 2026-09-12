@@ -37,5 +37,9 @@ app.post('/retell/lookup', (req, res) => lookup((req.body.args ?? req.body).acco
 app.use((req, res) => res.status(404).json({ error: 'not_found', path: req.path }));
 app.use((err, req, res, next) => res.status(err.status || 500).json({ error: err.type || 'internal_error' }));
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Atlas lookup API listening on :${PORT}`));
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => console.log(`Atlas lookup API listening on :${PORT}`));
+}
+
+module.exports = app;

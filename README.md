@@ -4,10 +4,11 @@ Prototype for CollectWise: ingest Atlas Recovery's `atlas_inventory.csv` into a 
 
 **Stack:** Node.js 18+, Express, SQLite (`better-sqlite3`). No external services required.
 
-**Public URL:** `https://atlas-lookup.onrender.com` (see [Deploying](#deploying)). Example:
+**Public URL:** `https://atlas-lookup.onrender.com` _(deploy pending; see [Deploying](#deploying))_. Once live:
 
 ```
 GET https://atlas-lookup.onrender.com/accounts/ATL-1001
+npm run verify -- https://atlas-lookup.onrender.com     # checks every sample account end to end
 ```
 
 ---
@@ -29,7 +30,19 @@ curl http://localhost:3000/accounts/DOES-NOT-EXIST      # -> 404
 ```
 
 To ingest a different file: `npm run ingest -- path/to/other.csv`.
-To run the unit tests: `npm test`.
+
+## Verifying
+
+Two deterministic layers, no manual judgement involved:
+
+```bash
+npm test                      # unit + ingest + HTTP tests (node --test, temp DBs, ~1s)
+npm run verify -- <base-url>  # black-box check of a RUNNING service against the CSV
+```
+
+`npm test` covers the validation rules, every ingest edge case (BOM, CRLF, quoted commas, shifted rows, duplicates, re-uploads, missing columns), and every HTTP status the API can return, including auth on/off and malformed JSON.
+
+`npm run verify` treats `data/atlas_inventory.csv` as the source of truth: it reads the file, fetches every account from the URL you give it, and asserts field-by-field equality plus the 404 and 400 paths. Point it at localhost after `npm start`, or at the public URL after deploying. It exits non-zero on any mismatch, so it can gate a deploy.
 
 ---
 
@@ -41,7 +54,8 @@ src/db.js                        opens SQLite, applies schema, shapes JSON outpu
 src/validate.js                  header normalisation + per-row validation rules
 src/ingest.js                    CSV ingestion script  (npm run ingest)
 src/server.js                    Express API           (npm start)
-src/test.js                      small unit tests      (npm test)
+src/verify.js                    black-box check of a running service (npm run verify)
+test/                            unit, ingest and HTTP tests (npm test)
 data/atlas_inventory.csv         clean sample file (8 accounts)
 data/atlas_inventory_with_errors.csv   sample exercising every validation path
 render.yaml                      one-click deploy config for Render
@@ -174,10 +188,20 @@ Ingest parses the whole file in memory and writes every row inside one SQLite tr
 
 Lookups hit the primary key, so each request is one B-tree probe regardless of table size. The API keeps one prepared statement open for the life of the process.
 
+## Beyond the spec, and why
+
+Kept deliberately small. Each item is a few lines and earns its place:
+
+- `POST /retell/lookup` so the Retell agent (Part 4) can call the API as a custom function without an adapter.
+- `GET /health` because Render needs a health check path and it doubles as a row-count sanity check.
+- Optional `API_KEY` because the public URL will eventually serve real debtor PII. Off by default so the grader can call it directly.
+- Header, phone and status normalisation so routine spreadsheet drift ("Account Number", "(415) 555-0134", "ACTIVE") does not cause skipped rows.
+
 ## Assumptions
 
 - Account numbers are opaque strings, unique per account, and case-insensitive.
-- Balance is the amount currently owed, in dollars, never negative. Credits or refunds are out of scope.
+- Balance is the amount currently owed, in US dollar format (`1,234.56`), never negative. Credits, refunds and European decimal commas are out of scope.
+- A name containing a comma must be quoted in the CSV (`"Doe, John"`), which is what Excel and Google Sheets do by default.
 - `status` is free text from Atlas. It is normalised for casing but not restricted to a fixed list, since the spec only gives examples.
 - Uploads are incremental. Accounts missing from a new file are not deleted.
 - The AI agent trusts the account number the caller provides and then separately verifies identity (last 4 of SSN in the Retell flow) before disclosing a balance.

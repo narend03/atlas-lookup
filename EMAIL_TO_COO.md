@@ -27,7 +27,7 @@ Each row should have these six columns: `account_number`, `debtor_name`, `phone_
 **What we need from your side**
 
 - Keep `account_number` unique and present on every row. It is the key the agent relies on.
-- Export as plain CSV (Excel's "CSV UTF-8" option works well).
+- Export as plain CSV (Excel's "CSV UTF-8" option works well). Names with a comma, like "Doe, John", need to be in quotes. Excel and Google Sheets do this automatically; a row where they are missing is skipped rather than loaded with the wrong values.
 - Send the full current inventory rather than only changed rows if you want to be sure everything is fresh, since we never delete on upload.
 - After each upload, glance at the skipped-row report. A handful of skipped rows usually means a formula or blank cell in the source spreadsheet.
 

@@ -10,7 +10,9 @@ const normalizeHeader = (h) =>
 function parseBalanceCents(raw) {
   const cleaned = str(raw).replace(/[$,\s]/g, '');
   if (!/^\d+(\.\d+)?$/.test(cleaned)) return null;
-  const cents = Math.round(Number(cleaned) * 100);
+  // String arithmetic, not float: 1.005 * 100 is 100.49999 in binary. Rounds half-up on the 3rd decimal.
+  const [whole, frac = ''] = cleaned.split('.');
+  const cents = Number(whole) * 100 + Number((frac + '00').slice(0, 2)) + (frac[2] >= '5' ? 1 : 0);
   return Number.isSafeInteger(cents) ? cents : null;
 }
 
@@ -23,10 +25,10 @@ function normalizePhone(raw) {
   return s || null;
 }
 
-/** "active" / "ACTIVE" -> "Active"; blank -> null. */
+/** "active" / "ACTIVE" -> "Active", "in COLLECTIONS" -> "In Collections"; blank -> null. */
 function normalizeStatus(raw) {
-  const s = str(raw);
-  return s ? s[0].toUpperCase() + s.slice(1).toLowerCase() : null;
+  const s = str(raw).toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+  return s || null;
 }
 
 /** Returns { record } when valid, otherwise { errors: [...] }. */
