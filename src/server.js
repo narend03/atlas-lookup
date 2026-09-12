@@ -10,7 +10,11 @@ const find = db.prepare(`
 const count = db.prepare('SELECT count(*) AS n FROM accounts');
 
 function lookup(accountNumber, res) {
-  const key = String(accountNumber ?? '').trim();
+  if (typeof accountNumber === 'number') accountNumber = String(accountNumber);
+  if (accountNumber != null && typeof accountNumber !== 'string') {
+    return res.status(400).json({ error: 'account_number must be a single string' });
+  }
+  const key = (accountNumber ?? '').trim();
   if (!key) return res.status(400).json({ error: 'account_number is required' });
   const row = find.get(key);
   if (!row) return res.status(404).json({ error: 'account_not_found', account_number: key });
@@ -35,7 +39,11 @@ app.get('/accounts', (req, res) => lookup(req.query.account_number, res));
 app.post('/retell/lookup', (req, res) => lookup((req.body.args ?? req.body).account_number, res));
 
 app.use((req, res) => res.status(404).json({ error: 'not_found', path: req.path }));
-app.use((err, req, res, next) => res.status(err.status || 500).json({ error: err.type || 'internal_error' }));
+app.use((err, req, res, next) => {
+  const status = err.status || 500;
+  if (status >= 500) console.error(err);
+  res.status(status).json({ error: err.type || (status < 500 ? 'bad_request' : 'internal_error') });
+});
 
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;

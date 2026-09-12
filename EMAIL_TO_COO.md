@@ -19,7 +19,7 @@ Each row should have these six columns: `account_number`, `debtor_name`, `phone_
 **What happens with imperfect rows**
 
 - **Missing account number:** that row is skipped. Everything else in the file still loads. You get a short report listing which lines were skipped and why.
-- **Balance that isn't a number** (for example "TBD" or a blank cell): that row is skipped, same as above. Dollar signs and commas such as `$1,250.00` are fine.
+- **Balance that isn't a number** (for example "TBD" or a blank cell): that row is skipped, same as above. Dollar signs and thousands commas such as `$1,250.00` are fine. European-style `1.250,00` is treated as invalid rather than guessed at, since misreading it would change the amount we quote to a debtor.
 - **Missing debtor name or status:** skipped, reported.
 - **The same account number listed twice:** the last one in the file wins. If an account number is already in our system from a previous upload, the new file's version replaces it. In practice this means re-uploading is always safe and always brings us up to date.
 - **Accounts left out of a new file** are kept as they were. Uploads add and update; they do not delete.

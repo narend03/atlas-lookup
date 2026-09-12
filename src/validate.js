@@ -6,12 +6,16 @@ const str = (v) => String(v ?? '').trim();
 const normalizeHeader = (h) =>
   str(h).replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/[\s-]+/g, '_').toLowerCase();
 
-/** "$1,234.50" -> 123450. null if not a non-negative number. */
+/**
+ * "$1,234.50" -> 123450. null if not a non-negative US-format number.
+ * Commas must be real thousands separators: "1.234,56" (European) and "1,23" are rejected
+ * rather than silently read as $1.23 or $123.
+ */
 function parseBalanceCents(raw) {
-  const cleaned = str(raw).replace(/[$,\s]/g, '');
-  if (!/^\d+(\.\d+)?$/.test(cleaned)) return null;
+  const cleaned = str(raw).replace(/[$\s]/g, '');
+  if (!/^(\d+|\d{1,3}(,\d{3})+)(\.\d+)?$/.test(cleaned)) return null;
   // String arithmetic, not float: 1.005 * 100 is 100.49999 in binary. Rounds half-up on the 3rd decimal.
-  const [whole, frac = ''] = cleaned.split('.');
+  const [whole, frac = ''] = cleaned.replace(/,/g, '').split('.');
   const cents = Number(whole) * 100 + Number((frac + '00').slice(0, 2)) + (frac[2] >= '5' ? 1 : 0);
   return Number.isSafeInteger(cents) ? cents : null;
 }

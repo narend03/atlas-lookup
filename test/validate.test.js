@@ -7,7 +7,8 @@ test('parseBalanceCents accepts money formats and rejects everything else', () =
   const cases = [
     ['1234.5', 123450], ['$1,234.50', 123450], ['0', 0], [' 10 ', 1000], ['3299.99', 329999],
     ['abc', null], ['', null], [undefined, null], [null, null], ['-5', null], ['1e5', null],
-    ['12.', null], ['.5', null], ['1.005', 101], ['99999999999999999999', null],
+    ['12.', null], ['.5', null], ['1.005', 101], ['12.345', 1235], ['12.344', 1234], ['99999999999999999999', null],
+    ['1,234', 123400], ['1,234,567.89', 123456789], ['1.234,56', null], ['1,23', null], ['12,3456', null],
   ];
   for (const [input, expected] of cases) assert.equal(parseBalanceCents(input), expected, `input=${input}`);
 });

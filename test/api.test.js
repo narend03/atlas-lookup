@@ -57,6 +57,23 @@ test('blank account number -> 400', async () => {
   assert.equal((await get('/accounts')).status, 400);
 });
 
+test('non-string account numbers -> 400, never stringified', async () => {
+  assert.equal((await get('/accounts?account_number=A&account_number=B')).status, 400);
+  assert.equal((await get('/accounts?account_number[x]=A')).status, 400);
+  const post = (body) => fetch(base + '/retell/lookup', { method: 'POST', headers: { 'content-type': 'application/json' }, body });
+  assert.equal((await post('{"args":{"account_number":["ATL-1001"]}}')).status, 400);
+  assert.equal((await post('{"args":{"account_number":{"a":1}}}')).status, 400);
+  assert.equal((await post('{"args":{"account_number":1001}}')).status, 404); // numbers are allowed, then not found
+});
+
+test('hostile inputs are safe: injection, traversal, bad encoding, oversize', async () => {
+  assert.equal((await get("/accounts/'%20OR%201=1--")).status, 404);
+  assert.equal((await get('/accounts/..%2F..%2Fetc%2Fpasswd')).status, 404);
+  assert.deepEqual(await get('/accounts/%E0%A4%A'), { status: 400, body: { error: 'bad_request' } });
+  const big = await fetch(base + '/retell/lookup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pad: 'x'.repeat(200000) }) });
+  assert.equal(big.status, 413);
+});
+
 test('unknown route -> JSON 404', async () => {
   assert.deepEqual(await get('/nope'), { status: 404, body: { error: 'not_found', path: '/nope' } });
 });

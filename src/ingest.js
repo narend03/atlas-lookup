@@ -25,17 +25,32 @@ const UPSERT = `
     balance_cents = excluded.balance_cents, status = excluded.status,
     client_name = excluded.client_name, updated_at = datetime('now')`;
 
+function readUtf8(csvPath) {
+  const buf = fs.readFileSync(csvPath);
+  if ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff)) {
+    throw new Error('file is UTF-16; re-export it as "CSV UTF-8"');
+  }
+  const text = buf.toString('utf8');
+  if (text.includes('\uFFFD')) throw new Error('file is not valid UTF-8 (names would be garbled); re-export it as "CSV UTF-8"');
+  return text;
+}
+
 function ingest(csvPath) {
   let headers = [];
-  const rows = parse(fs.readFileSync(csvPath, 'utf8'), {
+  const rows = parse(readUtf8(csvPath), {
     columns: (h) => (headers = h.map(normalizeHeader)),
     bom: true,
     trim: true,
     skip_empty_lines: true,
+    record_delimiter: ['\r\n', '\n', '\r'], // accept mixed line endings within one file
     relax_column_count: true, // keep going; per-row errors surface in info.error below
     info: true, // gives real line numbers and column-count errors per record
   });
 
+  if (!headers.length) throw new Error('file is empty');
+  if (headers.length === 1) throw new Error(`only one column found ("${headers[0]}"); is the file comma-separated?`);
+  const dupes = [...new Set(headers.filter((h, i) => headers.indexOf(h) !== i))];
+  if (dupes.length) throw new Error(`duplicate column(s): ${dupes.join(', ')}`);
   const missing = REQUIRED.filter((c) => !headers.includes(c));
   if (missing.length) throw new Error(`missing required column(s): ${missing.join(', ')} (found: ${headers.join(', ')})`);
   if (!rows.length) throw new Error('no data rows');

@@ -79,7 +79,35 @@ test('a missing required column aborts the whole file and changes nothing', () =
   assert.deepEqual(all().map((r) => r.account_number), ['A1']);
 });
 
-test('an empty or missing file is an error', () => {
-  assert.throws(() => ingest(env.csv('empty.csv', HEADER + '\n')), /no data rows/);
+test('mixed line endings in one file do not merge rows', () => {
+  reset();
+  const s = ingest(env.csv('mixed.csv', HEADER + '\r\nA1,Jane,,1,Active,Acme\nA2,Joe,,2,Active,Acme\r\nA3,Jo,,3,Active,Acme\r'));
+  assert.deepEqual([s.inserted, s.skipped], [3, []]);
+});
+
+test('file-level problems abort with a specific message and change nothing', () => {
+  reset();
+  ingest(env.csv('ok.csv', [HEADER, 'A1,Jane,,100,Active,Acme']));
+  const bad = [
+    ['empty.csv', '', /file is empty/],
+    ['header-only.csv', HEADER + '\n', /no data rows/],
+    ['semicolon.csv', HEADER.replace(/,/g, ';') + '\nA9;X;;1;Active;Acme', /only one column found.*comma-separated/],
+    ['dupcol.csv', HEADER + ',balance\nA9,X,,1,Active,Acme,999', /duplicate column\(s\): balance/],
+    ['utf16.csv', Buffer.from('\uFEFF' + HEADER + '\nA9,X,,1,Active,Acme', 'utf16le'), /UTF-16/],
+    ['latin1.csv', Buffer.from(HEADER + '\nA9,José,,1,Active,Acme', 'latin1'), /not valid UTF-8/],
+    ['badquote.csv', HEADER + '\nA9,"Jane,,1,Active,Acme', /Quote Not Closed/],
+  ];
+  for (const [name, content, re] of bad) assert.throws(() => ingest(env.csv(name, content)), re, name);
   assert.throws(() => ingest(path.join(env.dir, 'nope.csv')), /ENOENT/);
+  assert.deepEqual(all().map((r) => r.account_number), ['A1']);
+});
+
+test('100k rows ingest in under 10 seconds', () => {
+  reset();
+  const lines = [HEADER];
+  for (let i = 0; i < 100000; i++) lines.push(`B${i},Name ${i},4155550134,${i}.${i % 100},Active,Acme`);
+  const t = Date.now();
+  const s = ingest(env.csv('big.csv', lines));
+  assert.equal(s.inserted, 100000);
+  assert.ok(Date.now() - t < 10000);
 });
