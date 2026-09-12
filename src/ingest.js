@@ -3,13 +3,11 @@
 /**
  * Ingest atlas_inventory.csv into SQLite.
  *
- * Usage:  npm run ingest                      (reads data/atlas_inventory.csv)
- *         npm run ingest -- path/to/file.csv
+ *   npm run ingest                    reads data/atlas_inventory.csv
+ *   npm run ingest -- path/to/file.csv
  *
- * Duplicate account_number policy: LAST ROW WINS (upsert).
- *   - Within a file, a later row overwrites an earlier one.
- *   - Across uploads, the new file overwrites the stored row.
- * Invalid rows are skipped and reported; valid rows are still committed.
+ * Duplicate account_number: LAST ROW WINS (upsert), within a file and across uploads.
+ * Invalid rows are skipped and reported; every valid row is committed in one transaction.
  */
 const fs = require('fs');
 const path = require('path');
@@ -17,92 +15,79 @@ const { parse } = require('csv-parse/sync');
 const { openDb } = require('./db');
 const { normalizeHeader, validateRow } = require('./validate');
 
-const REQUIRED_COLUMNS = ['account_number', 'debtor_name', 'phone_number', 'balance', 'status', 'client_name'];
+const REQUIRED = ['account_number', 'debtor_name', 'phone_number', 'balance', 'status', 'client_name'];
+
+const UPSERT = `
+  INSERT INTO accounts (account_number, debtor_name, phone_number, balance_cents, status, client_name)
+  VALUES (@account_number, @debtor_name, @phone_number, @balance_cents, @status, @client_name)
+  ON CONFLICT (account_number) DO UPDATE SET
+    debtor_name = excluded.debtor_name, phone_number = excluded.phone_number,
+    balance_cents = excluded.balance_cents, status = excluded.status,
+    client_name = excluded.client_name, updated_at = datetime('now')`;
 
 function ingest(csvPath) {
-  if (!fs.existsSync(csvPath)) {
-    throw new Error(`CSV not found: ${csvPath}`);
-  }
-
+  let headers = [];
   const rows = parse(fs.readFileSync(csvPath, 'utf8'), {
-    columns: (header) => header.map(normalizeHeader),
+    columns: (h) => (headers = h.map(normalizeHeader)),
     bom: true,
     trim: true,
     skip_empty_lines: true,
-    relax_column_count: true,
+    relax_column_count: true, // keep going; per-row errors surface in info.error below
+    info: true, // gives real line numbers and column-count errors per record
   });
 
-  if (rows.length === 0) {
-    throw new Error('CSV has no data rows');
-  }
-
-  const present = Object.keys(rows[0]);
-  const missingCols = REQUIRED_COLUMNS.filter((c) => !present.includes(c));
-  if (missingCols.length) {
-    throw new Error(`CSV is missing required column(s): ${missingCols.join(', ')}. Found: ${present.join(', ')}`);
-  }
+  const missing = REQUIRED.filter((c) => !headers.includes(c));
+  if (missing.length) throw new Error(`missing required column(s): ${missing.join(', ')} (found: ${headers.join(', ')})`);
+  if (!rows.length) throw new Error('no data rows');
 
   const db = openDb();
-  const upsert = db.prepare(`
-    INSERT INTO accounts (account_number, debtor_name, phone_number, balance_cents, status, client_name)
-    VALUES (@account_number, @debtor_name, @phone_number, @balance_cents, @status, @client_name)
-    ON CONFLICT(account_number) DO UPDATE SET
-      debtor_name   = excluded.debtor_name,
-      phone_number  = excluded.phone_number,
-      balance_cents = excluded.balance_cents,
-      status        = excluded.status,
-      client_name   = excluded.client_name,
-      updated_at    = datetime('now')
-  `);
-
-  const summary = { total: rows.length, inserted: 0, updated: 0, skipped: 0, duplicatesInFile: 0, errors: [] };
+  const upsert = db.prepare(UPSERT);
+  const count = () => db.prepare('SELECT count(*) AS n FROM accounts').get().n;
   const seen = new Set();
+  const skipped = [];
 
-  const run = db.transaction(() => {
-    rows.forEach((row, i) => {
-      const line = i + 2; // +1 for header, +1 for 1-based
-      const result = validateRow(row);
-      if (!result.ok) {
-        summary.skipped++;
-        summary.errors.push({ line, account_number: row.account_number || '', errors: result.errors });
-        return;
+  const before = count();
+  db.transaction(() => {
+    for (const { record: row, info } of rows) {
+      const line = info.lines;
+      if (info.error) {
+        skipped.push({ line, reason: `expected ${headers.length} columns, got ${info.error.record.length}` });
+        continue;
       }
-      const key = result.record.account_number.toLowerCase();
-      if (seen.has(key)) summary.duplicatesInFile++;
-      seen.add(key);
+      const { record, errors } = validateRow(row);
+      if (errors) {
+        skipped.push({ line, account_number: row.account_number, reason: errors.join('; ') });
+        continue;
+      }
+      seen.add(record.account_number.toLowerCase());
+      upsert.run(record);
+    }
+  })();
+  const inserted = count() - before;
 
-      upsert.run(result.record);
-    });
-  });
-
-  // Upsert can't tell us insert-vs-update per row, so derive it from the row count delta.
-  const before = db.prepare('SELECT COUNT(*) AS n FROM accounts').get().n;
-  run();
-  const after = db.prepare('SELECT COUNT(*) AS n FROM accounts').get().n;
-  const valid = rows.length - summary.skipped;
-  summary.inserted = after - before;
-  summary.updated = valid - summary.inserted;
-  db.close();
-  return summary;
+  return {
+    total: rows.length,
+    inserted,
+    updated: seen.size - inserted,
+    duplicatesInFile: rows.length - skipped.length - seen.size,
+    skipped,
+  };
 }
 
 if (require.main === module) {
   const csvPath = path.resolve(process.argv[2] || path.join(__dirname, '..', 'data', 'atlas_inventory.csv'));
   try {
     const s = ingest(csvPath);
-    console.log(`Ingested ${csvPath}`);
-    console.log(`  rows in file:        ${s.total}`);
-    console.log(`  new accounts:        ${s.inserted}`);
-    console.log(`  updated accounts:    ${s.updated}`);
-    console.log(`  duplicates in file:  ${s.duplicatesInFile} (last row wins)`);
-    console.log(`  skipped (invalid):   ${s.skipped}`);
-    for (const e of s.errors) {
-      console.log(`    line ${e.line}${e.account_number ? ` (${e.account_number})` : ''}: ${e.errors.join('; ')}`);
-    }
-    process.exit(0);
+    console.log(`Ingested ${csvPath}
+  rows in file:        ${s.total}
+  new accounts:        ${s.inserted}
+  updated accounts:    ${s.updated}
+  duplicates in file:  ${s.duplicatesInFile} (last row wins)
+  skipped (invalid):   ${s.skipped.length}`);
+    for (const e of s.skipped) console.log(`    line ${e.line}${e.account_number ? ` (${e.account_number})` : ''}: ${e.reason}`);
   } catch (err) {
     console.error(`Ingest failed: ${err.message}`);
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
 

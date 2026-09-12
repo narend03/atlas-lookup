@@ -1,57 +1,41 @@
 'use strict';
 const express = require('express');
-const { openDb, toAccountJson } = require('./db');
+const { openDb } = require('./db');
+
+const db = openDb();
+const find = db.prepare(`
+  SELECT account_number, debtor_name, phone_number, balance_cents / 100.0 AS balance,
+         status, client_name, updated_at
+  FROM accounts WHERE account_number = ?`);
+const count = db.prepare('SELECT count(*) AS n FROM accounts');
+
+function lookup(accountNumber, res) {
+  const key = String(accountNumber ?? '').trim();
+  if (!key) return res.status(400).json({ error: 'account_number is required' });
+  const row = find.get(key);
+  if (!row) return res.status(404).json({ error: 'account_not_found', account_number: key });
+  res.json(row);
+}
 
 const app = express();
 app.use(express.json());
 
-const db = openDb();
-const findByAccount = db.prepare('SELECT * FROM accounts WHERE account_number = ?');
-
-// Optional shared-secret auth. Set API_KEY in the environment to enable.
+// Optional shared-secret auth: set API_KEY to require `x-api-key` (or Bearer) on everything but /health.
 app.use((req, res, next) => {
-  const required = process.env.API_KEY;
-  if (!required || req.path === '/health') return next();
-  const supplied = req.get('x-api-key') || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
-  if (supplied !== required) return res.status(401).json({ error: 'unauthorized' });
-  next();
+  const key = process.env.API_KEY;
+  if (!key || req.path === '/health') return next();
+  const given = req.get('x-api-key') || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  return given === key ? next() : res.status(401).json({ error: 'unauthorized' });
 });
 
-function lookup(accountNumber, res) {
-  const key = String(accountNumber || '').trim();
-  if (!key) {
-    return res.status(400).json({ error: 'account_number is required' });
-  }
-  const row = findByAccount.get(key);
-  if (!row) {
-    return res.status(404).json({ error: 'account_not_found', account_number: key });
-  }
-  return res.json(toAccountJson(row));
-}
-
-app.get('/health', (req, res) => {
-  const { n } = db.prepare('SELECT COUNT(*) AS n FROM accounts').get();
-  res.json({ ok: true, accounts: n });
-});
-
-// GET /accounts/:accountNumber
+app.get('/health', (req, res) => res.json({ ok: true, accounts: count.get().n }));
 app.get('/accounts/:accountNumber', (req, res) => lookup(req.params.accountNumber, res));
-
-// GET /accounts?account_number=...
-app.get('/accounts', (req, res) => {
-  if (req.query.account_number === undefined) {
-    return res.status(400).json({ error: 'account_number query parameter is required' });
-  }
-  lookup(req.query.account_number, res);
-});
-
-// Retell "custom function" webhook: Retell POSTs { name, args: { account_number } }.
-app.post('/retell/lookup', (req, res) => {
-  const args = (req.body && req.body.args) || req.body || {};
-  lookup(args.account_number, res);
-});
+app.get('/accounts', (req, res) => lookup(req.query.account_number, res));
+// Retell custom-function webhook: body is { name, args: { account_number } }.
+app.post('/retell/lookup', (req, res) => lookup((req.body.args ?? req.body).account_number, res));
 
 app.use((req, res) => res.status(404).json({ error: 'not_found', path: req.path }));
+app.use((err, req, res, next) => res.status(err.status || 500).json({ error: err.type || 'internal_error' }));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Atlas lookup API listening on :${PORT}`));

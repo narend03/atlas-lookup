@@ -97,6 +97,9 @@ Header names are normalised, so `Account Number`, `accountNumber` and `account_n
 | `status` | required; normalised to Title Case (`active` → `Active`) | row skipped |
 | `phone_number` | optional; 10-digit US numbers normalised to E.164 (`+14155550134`), anything else kept as typed | never fails |
 | `client_name` | optional | never fails |
+| *whole row* | must have exactly as many fields as the header | row skipped |
+
+The last rule matters more than it looks. An unquoted comma in a name (`Doe, John`) shifts every later field one column to the right, so the phone number lands in `balance` and would otherwise be stored as a multi-billion-dollar debt. Those rows are rejected with `expected 6 columns, got 7` and the reported line number is the real line in the file, even when earlier rows span multiple lines or blank lines were skipped.
 
 Invalid rows are **skipped, not fatal**. The rest of the file still imports, and the script prints each skipped line with its reason:
 
@@ -164,6 +167,12 @@ Any Node host works the same way (Railway, Fly.io, a VM): `npm ci`, then `npm ru
 For production use, swap `DB_PATH` for a persistent disk or move to Postgres. The SQL in this repo is standard enough that the change is confined to `src/db.js` and the upsert statement in `src/ingest.js`.
 
 ---
+
+## Performance notes
+
+Ingest parses the whole file in memory and writes every row inside one SQLite transaction with a single prepared statement. That is the fastest pattern SQLite offers (tens of thousands of rows per second) and comfortably handles files with hundreds of thousands of accounts. Streaming would only be worth adding if Atlas's exports grew to millions of rows.
+
+Lookups hit the primary key, so each request is one B-tree probe regardless of table size. The API keeps one prepared statement open for the life of the process.
 
 ## Assumptions
 
