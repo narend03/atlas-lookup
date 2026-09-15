@@ -37,6 +37,11 @@ app.use((req, res, next) => {
   return given === key ? next() : res.status(401).json({ error: 'unauthorized' });
 });
 
+app.get('/', (req, res) => res.json({
+  service: 'Atlas Recovery account lookup',
+  endpoints: ['GET /health', 'GET /accounts/:accountNumber', 'GET /accounts?account_number=...', 'POST /retell/lookup'],
+  example: `${req.protocol}://${req.get('host')}/accounts/ATL-1001`,
+}));
 app.get('/health', (req, res) => res.json({ ok: true, accounts: count.get().n }));
 app.get('/accounts/:accountNumber', (req, res) => lookup(req.params.accountNumber, res));
 app.get('/accounts', (req, res) => lookup(req.query.account_number, res));

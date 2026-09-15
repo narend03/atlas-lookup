@@ -78,6 +78,12 @@ test('unknown route -> JSON 404', async () => {
   assert.deepEqual(await get('/nope'), { status: 404, body: { error: 'not_found', path: '/nope' } });
 });
 
+test('GET / lists the endpoints', async () => {
+  const { status, body } = await get('/');
+  assert.equal(status, 200);
+  assert.ok(body.endpoints.includes('GET /accounts/:accountNumber'));
+});
+
 test('GET /health reports row count', async () => {
   assert.deepEqual(await get('/health'), { status: 200, body: { ok: true, accounts: 8 } });
 });
