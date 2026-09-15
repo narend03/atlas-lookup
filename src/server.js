@@ -23,6 +23,11 @@ function lookup(accountNumber, res) {
 
 const app = express();
 app.use(express.json());
+app.use((req, res, next) => {
+  const t = Date.now();
+  res.on('finish', () => console.log(`${req.method} ${req.originalUrl} -> ${res.statusCode} ${Date.now() - t}ms`));
+  next();
+});
 
 // Optional shared-secret auth: set API_KEY to require `x-api-key` (or Bearer) on everything but /health.
 app.use((req, res, next) => {

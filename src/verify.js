@@ -10,10 +10,9 @@
  * Exits 1 on any mismatch. No LLM, no eyeballing: every field is compared to what
  * the ingest rules say the API must return for that CSV row.
  */
-const fs = require('fs');
 const path = require('path');
-const { parse } = require('csv-parse/sync');
-const { normalizeHeader, validateRow } = require('./validate');
+const { readCsv } = require('./ingest');
+const { validateRow } = require('./validate');
 
 const base = (process.argv[2] || 'http://localhost:3000').replace(/\/$/, '');
 const csvPath = path.resolve(process.argv[3] || path.join(__dirname, '..', 'data', 'atlas_inventory.csv'));
@@ -34,9 +33,9 @@ const get = async (p) => {
 (async () => {
   console.log(`Verifying ${base} against ${csvPath}\n`);
 
-  const rows = parse(fs.readFileSync(csvPath, 'utf8'), { columns: (h) => h.map(normalizeHeader), bom: true, trim: true, skip_empty_lines: true });
   const expected = new Map();
-  for (const row of rows) {
+  for (const { record: row, info } of readCsv(csvPath).rows) {
+    if (info.error) continue;
     const { record } = validateRow(row);
     if (record) expected.set(record.account_number.toLowerCase(), record); // last row wins, like ingest
   }

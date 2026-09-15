@@ -50,7 +50,7 @@ npm run verify -- <base-url>  # black-box check of a RUNNING service against the
 
 ```
 schema.sql                       DB schema (applied automatically on first run)
-src/db.js                        opens SQLite, applies schema, shapes JSON output
+src/db.js                        opens SQLite and applies schema.sql
 src/validate.js                  header normalisation + per-row validation rules
 src/ingest.js                    CSV ingestion script  (npm run ingest)
 src/server.js                    Express API           (npm start)
@@ -182,7 +182,7 @@ Why overwrite rather than skip or error: the CSV is the source of truth in Atlas
 
 **400** if the account number is blank, not a single string (repeated query parameters, arrays, objects), or the URL is badly percent-encoded. Account numbers containing `/`, `?` or `#` must use the query form, percent-encoded. **401** if `API_KEY` is set and the request lacks a matching `x-api-key` header (or `Authorization: Bearer`). Auth is off by default so the grader can call the URL directly; turn it on before real debtor data is loaded.
 
-Environment variables (see `.env.example`): `PORT` (default 3000), `DB_PATH` (default `data/atlas.db`), `API_KEY` (optional).
+Environment variables: `PORT` (default 3000), `DB_PATH` (default `data/atlas.db`), `API_KEY` (optional). Set them in the shell or the host's dashboard; nothing reads a `.env` file.
 
 ---
 
@@ -210,6 +210,17 @@ Kept deliberately small. Each item is a few lines and earns its place:
 - `GET /health` because Render needs a health check path and it doubles as a row-count sanity check.
 - Optional `API_KEY` because the public URL will eventually serve real debtor PII. Off by default so the grader can call it directly.
 - Header, phone and status normalisation so routine spreadsheet drift ("Account Number", "(415) 555-0134", "ACTIVE") does not cause skipped rows.
+
+## What this is not yet (before real debtor data)
+
+Deliberately left out of the prototype, listed so the gap is visible:
+
+- **Auth is off by default.** Turn on `API_KEY` before loading real data. Names, phones and balances are PII.
+- **Account numbers are enumerable.** Sequential IDs plus an open endpoint means anyone could walk the list. Needs the API key at minimum, ideally rate limiting and an audit log of lookups.
+- **Storage is ephemeral on the free tier.** Move `DB_PATH` to a persistent disk or swap to Postgres; the SQL is standard enough that only `src/db.js` and the upsert change.
+- **Uploads are a script, not an endpoint.** Atlas currently hands the file to CollectWise; a `POST /uploads` route with the same validation would let them self-serve and would return the skip report directly.
+- **Uploads are incremental.** If Atlas wants a full-replace semantic, it is one `DELETE` before the transaction, but it should be an explicit flag, not the default.
+- **Observability is a request log line.** Enough to debug a Retell call; not enough for an SLO.
 
 ## Assumptions
 

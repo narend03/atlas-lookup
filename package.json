@@ -7,7 +7,7 @@
   "scripts": {
     "ingest": "node src/ingest.js",
     "start": "node src/server.js",
-    "test": "node --test test/",
+    "test": "node --test test/*.test.js",
     "verify": "node src/verify.js"
   },
   "dependencies": {

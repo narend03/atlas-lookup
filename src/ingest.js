@@ -35,7 +35,8 @@ function readUtf8(csvPath) {
   return text;
 }
 
-function ingest(csvPath) {
+/** Parse a CSV into { headers, rows: [{ record, info }] } with the exact rules ingest uses. */
+function readCsv(csvPath) {
   let headers = [];
   const rows = parse(readUtf8(csvPath), {
     columns: (h) => (headers = h.map(normalizeHeader)),
@@ -46,7 +47,11 @@ function ingest(csvPath) {
     relax_column_count: true, // keep going; per-row errors surface in info.error below
     info: true, // gives real line numbers and column-count errors per record
   });
+  return { headers, rows };
+}
 
+function ingest(csvPath) {
+  const { headers, rows } = readCsv(csvPath);
   if (!headers.length) throw new Error('file is empty');
   if (headers.length === 1) throw new Error(`only one column found ("${headers[0]}"); is the file comma-separated?`);
   const dupes = [...new Set(headers.filter((h, i) => headers.indexOf(h) !== i))];
@@ -61,6 +66,7 @@ function ingest(csvPath) {
   const seen = new Set();
   const skipped = [];
 
+  // Upsert reports 1 change for both insert and update, so derive inserts from the row-count delta.
   const before = count();
   db.transaction(() => {
     for (const { record: row, info } of rows) {
@@ -106,4 +112,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { ingest };
+module.exports = { ingest, readCsv };
