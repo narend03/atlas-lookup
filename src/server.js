@@ -22,6 +22,7 @@ function lookup(accountNumber, res) {
 }
 
 const app = express();
+app.set('trust proxy', true); // behind Render's TLS terminator, so req.protocol reflects the real scheme
 app.use(express.json());
 app.use((req, res, next) => {
   const t = Date.now();
