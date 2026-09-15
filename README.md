@@ -4,12 +4,17 @@ Prototype for CollectWise: ingest Atlas Recovery's `atlas_inventory.csv` into a 
 
 **Stack:** Node.js 18+, Express, SQLite (`better-sqlite3`). No external services required.
 
-**Public URL:** `https://atlas-lookup.onrender.com` _(deploy pending; see [Deploying](#deploying))_. Once live:
+**Public URL:** https://atlas-lookup.onrender.com
 
 ```
+GET https://atlas-lookup.onrender.com/health
 GET https://atlas-lookup.onrender.com/accounts/ATL-1001
-npm run verify -- https://atlas-lookup.onrender.com     # checks every sample account end to end
+GET https://atlas-lookup.onrender.com/accounts?account_number=ATL-1005
+GET https://atlas-lookup.onrender.com/accounts/DOES-NOT-EXIST      # -> 404
+npm run verify -- https://atlas-lookup.onrender.com                 # checks every sample account end to end
 ```
+
+It runs on Render's free tier, which sleeps after 15 minutes idle. The first request after a pause takes about 30 seconds; every request after that is instant. The sample CSV is ingested on every boot, so the eight `ATL-100x` accounts are always present.
 
 ---
 
